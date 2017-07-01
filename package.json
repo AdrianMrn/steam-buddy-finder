@@ -1,0 +1,29 @@
+{
+  "name": "steam-buddy-finder",
+  "version": "1.0.0",
+  "description": "Find new Steam friends close to where you live!",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "steam-buddy-finder"
+  },
+  "keywords": [
+    "steam",
+    "buddy",
+    "finder",
+    "friends",
+    "games",
+    "location",
+    "geo"
+  ],
+  "author": "Adriaan Marain",
+  "license": "ISC",
+  "dependencies": {
+    "async": "^2.5.0",
+    "cheerio": "^1.0.0-rc.1",
+    "request": "^2.81.0"
+  }
+}
