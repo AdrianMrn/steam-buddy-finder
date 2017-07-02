@@ -55,7 +55,6 @@ var getProfileInfo = function($, next){
             if (body) {
                 body = JSON.parse(body);
                 if (body.status == 'OVER_QUERY_LIMIT') {
-                    console.log(body.status);
                     process.exit();
                 }
                 if (body.status == 'OK') {
@@ -111,6 +110,7 @@ var gatherGames = function($, next){
     if (gamesPage && gamesPage.indexOf("games") > 0) {
         request(gamesPage, function(err, response, body) {
             if (err) console.log(err);
+            console.log(response.statusCode);
             if (response && response.statusCode == 200){
                 var gameItemsScript = [];
                 var json;
@@ -154,7 +154,10 @@ var gatherGames = function($, next){
                     if (err) console.log('A game failed to process.');
                     next(userGames);
                 });
-            }
+            } else {
+				console.log(response.statusCode);
+				//next(userGames);
+			}
         });
     } else {
         next(userGames);
@@ -163,11 +166,14 @@ var gatherGames = function($, next){
 
 var findNewProfile = function() {
     //future: add $or to check for profiles scraped longer than x days ago (a week?) --> maybe only contact google maps API if location that we currently have saved has changed since last update? so we're not wasting google api quota
+    console.log("\nFinding new user to scrape");
     user_schema.findOne({ 'isScraped':false}, function(err, response){
         if (err) console.log(err);
         if (response) {
             scrape(response.profileUrl);
-        }
+        } else {
+			setTimeout(findNewProfile(), 3000);
+		}
     })
 }
 
