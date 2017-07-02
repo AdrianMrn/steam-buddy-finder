@@ -199,7 +199,7 @@ var findNewProfiles = function() {
     }).limit(100);
 }
 
-//findNewProfiles();
+findNewProfiles();
 //scrape100("76561197972851741,76561198320752697");
 
 //API part
@@ -219,4 +219,4 @@ var findNearbyUsers = function(appid, coordinates) {
     }).limit(1)
 }
 
-findNearbyUsers(730, (100,50));
+//findNearbyUsers(730, (100,50));
