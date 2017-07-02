@@ -1,7 +1,7 @@
 var mongoose = require('mongoose');
 Schema = mongoose.Schema;
 
-var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder3');
+var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder5');
 
 var userSchema = new Schema({
   isScraped: { type: Boolean, default: false },
@@ -17,7 +17,8 @@ var userSchema = new Schema({
       locstatecode: String,
       loccityid: Number
     },
-    locationCoords: { latitude: String, longitude: String },
+    locationCoords: { type: [Number], index: '2dsphere' },
+    locationString: String,
     country: String,
   },
   games: [{
