@@ -70,7 +70,7 @@ var getProfileInfo = function($, next){
 
 var gatherProfiles = function($, next){
     friendsPage = $('div.profile_friend_links > div.profile_count_link.ellipsis > a').attr('href');
-    if (friendsPage) {
+    if (friendsPage && friendsPage.indexOf("friends") > 0) {
         request(friendsPage, function(err, response, body) {
             if (err) console.log(err);
             if (response && response.statusCode == 200){
@@ -104,7 +104,7 @@ var gatherProfiles = function($, next){
 var gatherGames = function($, next){
     var userGames = [];
     gamesPage = $('div.profile_item_links > div.profile_count_link > a').attr('href');
-    if (gamesPage) {
+    if (gamesPage && gamesPage.indexOf("games") > 0) {
         request(gamesPage, function(err, response, body) {
             if (err) console.log(err);
             if (response && response.statusCode == 200){
@@ -167,5 +167,7 @@ var findNewProfile = function() {
     })
 }
 
-findNewProfile();
-//scrape("https://steamcommunity.com/id/flashkonijn");
+//findNewProfile();
+scrape("https://steamcommunity.com/id/flashkonijn");
+
+//future: if we run into a scraping error along the way anywhere (try > catch?), set that profile to isScraped = true and log the error somewhere?
