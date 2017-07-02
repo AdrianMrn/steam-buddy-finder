@@ -2,10 +2,11 @@ var request = require('request');
 var rp = require('request-promise');
 var async = require('async');
 var user_schema = require('./models/users').user;
+var vars = require('./.vars');
 var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
-var key = "783021B49D36549D650942D12BE48EFD"; //move this to a .env file later
+var key = vars.steamapikey;
 
 
 var scrape100 = function(steamids) {
