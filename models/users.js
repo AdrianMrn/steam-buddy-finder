@@ -1,26 +1,29 @@
 var mongoose = require('mongoose');
 Schema = mongoose.Schema;
 
-var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder');
+var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder3');
 
 var userSchema = new Schema({
-  steamid64: Number,
-  username: String,
-  profileUrl: String,
-  isPublic: Boolean,
   isScraped: { type: Boolean, default: false },
+  steamid: String,
+  username: String,
+  profileurl: String,
+  isPublic: Boolean,
+  lastlogoff: Number,
+  avatar: String,
   locationInfo: {
-    locationString: String,
+    raw: {
+      loccountrycode: String,
+      locstatecode: String,
+      loccityid: Number
+    },
     locationCoords: { latitude: String, longitude: String },
     country: String,
   },
-  gamesOwned: [{
-        appId: Number,
-        name: String,
-        logoUrl: String,
-        hoursPlayed: Number,
-        hoursPlayedRecently: Number,
-        lastPlayed: Number,
+  games: [{
+        appid: Number,
+        playtime_forever: Number,
+        playtime_2weeks: Number,
   }],
 }, {
   timestamps: true

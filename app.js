@@ -1,184 +1,144 @@
-var mongoose = require('mongoose');
 var request = require('request');
 var rp = require('request-promise');
-var cheerio = require('cheerio');
 var async = require('async');
 var user_schema = require('./models/users').user;
-
+var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
+var key = "783021B49D36549D650942D12BE48EFD"; //move this to a .env file later
 
-var scrape = function(uri){
-    console.log("Now scraping", uri);
-    request(uri, function(err, response, body) {
-        if (err) console.log(err);
-        if (response && response.statusCode == 200){
-            var $ = cheerio.load(body);
 
-            getProfileInfo($, function(userInfo) {
-                gatherProfiles($, function() {
-                    gatherGames($, function(userGames) {
-                        user_schema.findOneAndUpdate({ 'profileUrl':uri }, {
-                            'isScraped': true,
-                            'profileUrl': uri,
-                            'username': userInfo.username,
-                            'locationInfo.locationString':userInfo.locationString,
-                            'locationInfo.locationCoords.latitude':userInfo.latitude,
-                            'locationInfo.locationCoords.longitude':userInfo.longitude,
-                            'locationInfo.country':userInfo.country,
-                            'gamesOwned': userGames,
-                        }, {upsert:true}, function(err, response){
-                            if (err) console.log(err);
-                            console.log(uri, "added.");
-                            findNewProfile();
-                        });
-                    });
-                });
+var scrape100 = function(steamids) {
+    console.log("Starting to get info for batch.");
+    gatherProfilesInfo(steamids, function() {
+        console.log("Starting to get games for batch.");
+        gatherProfilesGames(steamids, function() {
+            console.log("Starting to get friends for batch.");
+            gatherProfilesFriends(steamids, function() {
+                console.log("Batch of 100 finished, getting another");
+                findNewProfiles();
             });
-        }
+        });
     });
 }
 
-var getProfileInfo = function($, next){
-    var userInfo = {};
-    userInfo.username = $('span.actual_persona_name').text();
+var gatherProfilesInfo = function(steamids, next) {
+    var uri = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + key + "&steamids=" + steamids;
+    request(uri, function(err, response, body) {
+        if (err) console.log(err);
+        if (response && response.statusCode == 200){
+            var body = JSON.parse(response.body);
+            players = body.response.players;
 
-    var _locationString = $('img.profile_flag')
-    if (_locationString && _locationString[0]) {
-        userInfo.locationString = _locationString[0].next.data.trim();
+            async.eachLimit(players, 5, function(player, callback) {
+                var isPublic = 0;
+                if (player.communityvisibilitystate == 3 && player.profilestate) isPublic = 1;
 
-        //Google Maps API geocoding
-        key="AIzaSyDNzut-ttTQa6_O1SJVKQxMw5tBgVwjBf4" //future: move this to a gitignored file
-        url="https://maps.googleapis.com/maps/api/geocode/json?address=" + userInfo.locationString + "&key=" + key;
-
-        request(url, function(err, response, body) {
-            if (body) {
-                body = JSON.parse(body);
-                if (body.status == 'OVER_QUERY_LIMIT') {
-                    process.exit();
-                }
-                if (body.status == 'OK') {
-                    if (typeof(body.results[0].geometry.location.lat) != undefined) {
-                        userInfo.latitude = body.results[0].geometry.location.lat;
-                        userInfo.longitude = body.results[0].geometry.location.lng;
+                user_schema.findOneAndUpdate({steamid:player.steamid}, {
+                    steamid:player.steamid,
+                    username: player.personaname,
+                    profileurl: player.profileurl,
+                    isPublic: isPublic,
+                    lastlogoff: player.lastlogoff ? player.lastlogoff : 0,
+                    avatar: player.avatar,
+                    //private info
+                    locationInfo: {
+                        raw: {
+                            loccountrycode: player.loccountrycode,
+                            locstatecode: player.locstatecode,
+                            loccityid: player.loccityid ? player.loccityid : null
+                        } //get coordinates, ... using https://github.com/Holek/steam-friends-countries
                     }
-                }
-            }
-        });
+                }, {upsert:true}, function(err, response){
+                    if (err) console.log(err);
+                    console.log("Got a user's profile info:", player.steamid);
+                    callback();
+                });
+            }, function(err) {
+                if (err) console.log(err)
+                next();
+            });
+        } else next()
+    });
+}
 
-        userInfo.country = userInfo.locationString.split(" ").splice(-1)[0];
-    }
-    next(userInfo);
-} 
 
-var gatherProfiles = function($, next){
-    friendsPage = $('div.profile_friend_links > div.profile_count_link.ellipsis > a').attr('href');
-    if (friendsPage && friendsPage.indexOf("friends") > 0) {
-        request(friendsPage, function(err, response, body) {
+var gatherProfilesGames = function(steamids, next) {
+    var uri = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + key + "&format=json&include_played_free_games=true&steamid=";
+    var steamidsarray = steamids.split(",");
+
+    async.eachLimit(steamidsarray, 5, function(steamid, callback) {
+        request(uri + steamid, function(err, response, body) {
             if (err) console.log(err);
             if (response && response.statusCode == 200){
+                body = JSON.parse(body);
+                games = body.response.games;
+                user_schema.findOneAndUpdate({steamid:steamid}, {games:games, isScraped:true,}, function(err, response) {
+                    if (err) console.log(err);
+                    console.log("Got a user's games list:", steamid);
+                    callback();
+                });
+            } else callback();
+        });
+    }, function(err) {
+        if (err) console.log(err);
+        next();
+    });
+}
 
-                var profileUrls = [];
-                var $ = cheerio.load(body);
+var gatherProfilesFriends = function(steamids, next) {
+    var uri = "http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key=" + key + "&relationship=friend&steamid=";
+    var steamidsarray = steamids.split(",");
 
-                friendProfileUrls = $('a.friendBlockLinkOverlay');
-                $(friendProfileUrls).each(function(i, link){
-                    var l = $(link).attr('href');
-                    user_schema.findOne({ 'profileUrl':l }, function(err, response) {
+    async.eachLimit(steamidsarray, 5, function(steamid, callback) {
+        request(uri + steamid, function(err, response, body) {
+            if (err) console.log(err);
+            if (response && response.statusCode == 200){
+                body = JSON.parse(body);
+                friends = body.friendslist.friends;
+
+                async.eachLimit(friends, 5, function(friend, callbackFriend) {
+                    user_schema.findOne({steamid:friend.steamid}, function(err, response) {
                         if (err) console.log(err);
                         if (!response) {
-                            new user_schema({
-                                'profileUrl':l,
-                                'isScraped':false,
-                            }).save(function(err){
+                            user_schema.findOneAndUpdate({steamid:friend.steamid}, {
+                                isScraped:false,
+                                steamid:friend.steamid,
+                            }, {upsert:true}, function(err, response){
                                 if (err) console.log(err);
-                            })
-                        }
-                    })
-                });
-                next();
-            }
-        });
-    } else {
-        next();
-    } 
-}
-
-var gatherGames = function($, next){
-    var userGames = [];
-    gamesPage = $('div.profile_item_links > div.profile_count_link > a').attr('href');
-    if (gamesPage && gamesPage.indexOf("games") > 0) {
-        request(gamesPage, function(err, response, body) {
-            if (err) console.log(err);
-            console.log(response.statusCode);
-            if (response && response.statusCode == 200){
-                var gameItemsScript = [];
-                var json;
-                var $ = cheerio.load(body);
-
-                //getting the script with all the game info
-                gameItemsScript = $('body > div.responsive_page_frame.with_header > div.responsive_page_content > div.responsive_page_template_content > script');
-                script = gameItemsScript.contents()['0'].data;
-
-                //removing everything before the json starts
-                jsonString = script.substring(script.indexOf("["));
-
-                //removing everything after the json ends
-                jsonString = jsonString.substring(0, jsonString.indexOf("}];") + 2);
-
-                json = JSON.parse(jsonString);
-                async.each(json, function(game, callback) {
-                    var gameInfo = {};
-                    gameInfo.appId = game.appid;
-                    gameInfo.name = game.name;
-                    gameInfo.logoUrl = "";
-                    if (game.logo) {
-                        gameInfo.logoUrl = game.logo;
-                    }
-                    gameInfo.hoursPlayed = 0;
-                    if (game.hours_forever) {
-                        gameInfo.hoursPlayed = game.hours_forever.replace(/,/g, "");
-                    }
-                    gameInfo.hoursPlayedRecently = 0;
-                    if (game.hours) { // hours played in the last 2 weeks
-                        gameInfo.hoursPlayedRecently = game.hours;
-                    }
-                    gameInfo.lastPlayed = 0;
-                    if (game.last_played) { // unix timestamp of when the game was last played. 0 = never played.
-                        gameInfo.lastPlayed = game.last_played;
-                    }
-
-                    userGames.push(gameInfo);
-                    callback();
+                                console.log("Got a user's friend list:", steamid);
+                                callbackFriend();
+                            });
+                        } else callbackFriend();
+                    });
                 }, function(err) {
-                    if (err) console.log('A game failed to process.');
-                    next(userGames);
+                    if (err) console.log(err);
+                    callback();
                 });
-            } else {
-				console.log(response.statusCode);
-				//next(userGames);
-			}
+            } else callback();
         });
-    } else {
-        next(userGames);
-    }
-}
-
-var findNewProfile = function() {
-    //future: add $or to check for profiles scraped longer than x days ago (a week?) --> maybe only contact google maps API if location that we currently have saved has changed since last update? so we're not wasting google api quota
-    console.log("\nFinding new user to scrape");
-    user_schema.findOne({ 'isScraped':false}, function(err, response){
+    }, function(err) {
         if (err) console.log(err);
-        if (response) {
-            scrape(response.profileUrl);
-        } else {
-			setTimeout(findNewProfile(), 3000);
-		}
-    })
+        next();
+    });
 }
 
-//findNewProfile();
-scrape("https://steamcommunity.com/id/flashkonijn");
+//gets 100 unscraped steamid64's from the database, delimited by commas & starts the scrape100() function
+var findNewProfiles = function() {
+    steamids = "";
+    user_schema.find({isScraped:false, steamid: {$exists: true}}, {steamid:1}, function(err,users) {
+        if (err) console.log(err);
+        async.each(users, function(user, callback) {
+            steamids += user.steamid + ",";
+            callback();
+        }, function(err) {
+            if (err) console.log(err);
+            steamids = steamids.substring(0, steamids.length - 1);
+            scrape100(steamids)
+        });
 
-//future: if we run into a scraping error along the way anywhere (try > catch?), set that profile to isScraped = true and log the error somewhere?
-//future: get new profiles from groups?
+    }).limit(100);
+}
+
+findNewProfiles();
+//scrape100("76561197972851741,76561198320752697");
