@@ -54,6 +54,10 @@ var getProfileInfo = function($, next){
         request(url, function(err, response, body) {
             if (body) {
                 body = JSON.parse(body);
+                if (body.status == 'OVER_QUERY_LIMIT') {
+                    console.log(body.status);
+                    process.exit();
+                }
                 if (body.status == 'OK') {
                     if (typeof(body.results[0].geometry.location.lat) != undefined) {
                         userInfo.latitude = body.results[0].geometry.location.lat;
@@ -171,3 +175,4 @@ var findNewProfile = function() {
 scrape("https://steamcommunity.com/id/flashkonijn");
 
 //future: if we run into a scraping error along the way anywhere (try > catch?), set that profile to isScraped = true and log the error somewhere?
+//future: get new profiles from groups?
