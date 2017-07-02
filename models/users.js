@@ -3,24 +3,30 @@ Schema = mongoose.Schema;
 
 var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder');
 
-var scrapeSchema = new Schema({
-  steamid64: {type: Number, index: { unique: true }},
+var userSchema = new Schema({
+  steamid64: Number,
   username: String,
   profileUrl: String,
   isPublic: Boolean,
-  gamesScraped: { type: Boolean, default: false },
-  location: String,
-  locationCoords: String,
+  isScraped: { type: Boolean, default: false },
+  locationInfo: {
+    locationString: String,
+    locationCoords: { latitude: String, longitude: String },
+    country: String,
+  },
   gamesOwned: [{
-        appid: Number,
+        appId: Number,
+        name: String,
+        logoUrl: String,
         hoursPlayed: Number,
-        playedInLastTwoWeeks: { type: Boolean, default: false },
+        hoursPlayedRecently: Number,
+        lastPlayed: Number,
   }],
 }, {
   timestamps: true
 });
 
-var scraper = localConnection.model('scraper', scrapeSchema);
+var user = localConnection.model('user', userSchema);
 module.exports = {
-	scraper: scraper
+	user: user
 };
