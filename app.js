@@ -52,10 +52,15 @@ var getProfileInfo = function($, next){
         url="https://maps.googleapis.com/maps/api/geocode/json?address=" + userInfo.locationString + "&key=" + key;
 
         request(url, function(err, response, body) {
-            body = JSON.parse(body);
-
-            userInfo.latitude = body.results[0].geometry.location.lat;
-            userInfo.longitude = body.results[0].geometry.location.lng;
+            if (body) {
+                body = JSON.parse(body);
+                if (body.status == 'OK') {
+                    if (typeof(body.results[0].geometry.location.lat) != undefined) {
+                        userInfo.latitude = body.results[0].geometry.location.lat;
+                        userInfo.longitude = body.results[0].geometry.location.lng;
+                    }
+                }
+            }
         });
 
         userInfo.country = userInfo.locationString.split(" ").splice(-1)[0];
@@ -153,7 +158,7 @@ var gatherGames = function($, next){
 }
 
 var findNewProfile = function() {
-    //future: add $or to check for profiles scraped longer than x days ago (a week?)
+    //future: add $or to check for profiles scraped longer than x days ago (a week?) --> maybe only contact google maps API if location that we currently have saved has changed since last update? so we're not wasting google api quota
     user_schema.findOne({ 'isScraped':false}, function(err, response){
         if (err) console.log(err);
         if (response) {
@@ -162,4 +167,5 @@ var findNewProfile = function() {
     })
 }
 
-scrape("https://steamcommunity.com/id/flashkonijn");
+findNewProfile();
+//scrape("https://steamcommunity.com/id/flashkonijn");
