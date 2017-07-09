@@ -7,7 +7,6 @@ var geofile = require('./steam_countries.min.json');
 var mongoose = require('mongoose');
 mongoose.Promise = global.Promise;
 
-var sleep = false;
 var key = vars.steamapikey;
 
 var skipFriendList = true;
@@ -114,38 +113,27 @@ var gatherProfilesGames = function(steamids, next) {
     var uri = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + key + "&format=json&include_played_free_games=true&steamid=";
     var steamidsarray = steamids.split(",");
 
-    async.eachLimit(steamidsarray, 25, function(steamid, callback) {
+    async.eachLimit(steamidsarray, 100, function(steamid, callback) {
         request(uri + steamid, function(err, response, body) {
             if (err) console.log(err);
             if (response && response.statusCode == 200){
                 body = JSON.parse(body);
                 games = body.response.games;
-				if (games) {
-                    user_schema.findOneAndUpdate({steamid:steamid}, {games:games, isScraped:true,}, function(err, response) {
+                user_schema.findOneAndUpdate({steamid:steamid}, {games:games, isScraped:true,}, function(err, response) {
                     if (err) console.log(err);
-						console.log("Got a user's games list:", steamid);
-						callback();
-					});
-				} else {
-					sleep = true;
-					callback();
-				}
+                    console.log("Got a user's games list:", steamid);
+                    callback();
+                });
             } else {
-				console.log(response);
-				if (response) console.log(response.statusCode ? response.statusCode : "Error");
-				//process.exit();
-				callback();
-			}
+            console.log(response);
+            if (response) console.log(response.statusCode ? response.statusCode : "Error");
+            //process.exit();
+            callback();
+        }
         });
     }, function(err) {
         if (err) console.log(err);
-		if (sleep) {
-			console.log("sleeping because of empty response");
-			sleep = false;
-			setTimeout(next, 1200);
-		} else {
-			next();
-		}
+        next();
     });
 }
 
@@ -211,8 +199,8 @@ var findNewProfiles = function() {
     }).limit(100);
 }
 
-//findNewProfiles();
-scrape100("76561197972851741,76561198320752697");
+findNewProfiles();
+//scrape100("76561197972851741,76561198320752697");
 
 //API part
 var findNearbyUsers = function(appid, coordinates) {
