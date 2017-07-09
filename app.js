@@ -72,6 +72,13 @@ var gatherProfilesInfo = function(steamids) {
                     var tmp = locationCoords[1];
                     locationCoords[1] = locationCoords[0];
                     locationCoords[0] = tmp;
+
+                    //if coordinates would cause an error, switch them around again? no idea know why this happens.
+                    if (locationCoords[1] >= 90) {
+                        var tmp = locationCoords[1];
+                    locationCoords[1] = locationCoords[0];
+                    locationCoords[0] = tmp;
+                    }
                 } else locationCoords = null;
 
                 user_schema.findOneAndUpdate({steamid:player.steamid}, {
@@ -100,14 +107,22 @@ var gatherProfilesInfo = function(steamids) {
                 });
             }, function(err) {
                 if (err) console.log(err)
-                console.log("Got 100 users' profile info.");
-                findNewProfiles(1);
+                var amountOfUsers = steamids.split(",").length
+                console.log("Got", amountOfUsers, "users' profile info.");
+                if(amountOfUsers < 100) {
+                    console.log("gatherProfilesInfo: Less than 100 users in last batch, pausing for 10 seconds.");
+                    setTimeout(function(){findNewProfiles(1);}, 10000);
+                } else {
+                    findNewProfiles(1);
+                }
             });
         } else {
-            console.log(response);
-            if (response) console.log(response.statusCode ? response.statusCode : "Error");
-            //process.exit();
-            findNewProfiles(1);
+            //console.log(response);
+            console.log("gatherProfilesInfo: Issue scraping ", steamids, response ? response.statusCode : "Error");
+            /*user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
+            });*/
+            if (err) console.log(err);
+            setTimeout(function(){findNewProfiles(1);}, 1000);
         }
     });
 }
@@ -115,7 +130,6 @@ var gatherProfilesInfo = function(steamids) {
 //needs scrapedGames == false && scrapedProfile == true, 1 by 1
 var gatherProfilesGames = function(steamid) {
     var uri = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + key + "&format=json&include_played_free_games=true&steamid=";
-
     request(uri + steamid, function(err, response, body) {
         if (err) console.log(err);
         if (response && response.statusCode == 200){
@@ -125,26 +139,27 @@ var gatherProfilesGames = function(steamid) {
                 user_schema.findOneAndUpdate({steamid:steamid}, {games:games, scrapedGames:true,}, function(err, response) {
                 if (err) console.log(err);
                     console.log("Got a user's gamelist:", steamid);
-                    setTimeout(findNewProfiles(2), 200);
+                    setTimeout(function(){findNewProfiles(2);}, 200);
                 });
             } else {
                 user_schema.findOneAndUpdate({steamid:steamid}, {errorWhileScraping:true,}, function(err, response) {
                 if (err) console.log(err);
                     console.log("Didn't manage to get a user's gamelist:", steamid);
-                    setTimeout(findNewProfiles(2), 1000);
+                    setTimeout(function(){findNewProfiles(2);}, 200);
                 });
             }
         } else {
-            console.log(response);
-            if (response) console.log(response.statusCode ? response.statusCode : "Error");
-            //process.exit();
-            findNewProfiles(2);
+            //console.log(response);
+            console.log("gatherProfilesGames: Issue scraping ", steamid, response ? response.statusCode : "Error");
+            user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
+                if (err) console.log(err);
+                findNewProfiles(2);
+            });
         }
     });
 }
 
 //needs scrapedProfile == true && scrapedFriends == false, 1 by 1
-//future: set scrapedFriends to true for steamid
 var gatherProfilesFriends = function(steamid) {
     var uri = "http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key=" + key + "&relationship=friend&steamid=";
 
@@ -159,7 +174,9 @@ var gatherProfilesFriends = function(steamid) {
                         if (err) console.log(err);
                         if (!response) {
                             user_schema.findOneAndUpdate({steamid:friend.steamid}, {
-                                isScraped:false,
+                                scrapedProfile:false,
+                                scrapedGames:false,
+                                scrapedFriends:false,
                                 steamid:friend.steamid,
                             }, {upsert:true}, function(err, response){
                                 if (err) console.log(err);
@@ -171,27 +188,32 @@ var gatherProfilesFriends = function(steamid) {
                 }, function(err) {
                     if (err) console.log(err);
                     console.log("Got a user's friends' friendlists:", steamid);
-                    findNewProfiles(3);
+                    user_schema.findOneAndUpdate({steamid:steamid}, {scrapedFriends:true}, function(err, response) {
+                        if (err) console.log(err);
+                        findNewProfiles(3);
+                    });
                 });
             } else findNewProfiles(3);
         } else {
-            console.log(response);
-            if (response) console.log(response.statusCode ? response.statusCode : "Error");
-            //process.exit();
-            findNewProfiles(3);
+            //console.log(response);
+            console.log("gatherProfilesFriends: Issue scraping ", steamid, response ? response.statusCode : "Error");
+            user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
+                if (err) console.log(err);
+                findNewProfiles(3);
+            });
         }
     });
 }
 
 //takes a variable to decide which type of unscraped profiles to return (1=gatherProfilesInfo, 2=gatherProfilesGames, 3=gatherProfilesFriends)
-//future: check for errorWhileScraping
+//future: implement errorWhileScraping in each function
 var findNewProfiles = function(scrapeType) {
     switch (scrapeType) {
         case 1: //1 = gatherProfilesInfo: get 100 (scrapedProfile == false) steamid64's from the database, delimited by commas
             steamids = "";
-            user_schema.find({scrapedProfile:false, steamid: {$exists: true}}, {steamid:1}, function(err,users) {
+            user_schema.find({ $or:[ {errorWhileScraping:false}, {errorWhileScraping:{$exists:false}} ], scrapedProfile:false, steamid: {$exists: true}}, {steamid:1}, function(err,users) {
                 if (err) console.log(err);
-                if (!users) {
+                if (!users.length) {
                     console.log("findNewProfiles(gatherProfilesInfo): No unscraped users found. Retry in 10.");
                     setTimeout(function(){ findNewProfiles(1); }, 10000);
                 } else {
@@ -205,34 +227,47 @@ var findNewProfiles = function(scrapeType) {
                     });
                 }
             }).limit(100);
-
             break;
         case 2: //2 = gatherProfilesGames: get 1 (scrapedGames == false) steamid64
-            user_schema.findOne({scrapedProfile:true, isPublic:true, scrapedGames:false}, {steamid:1}, function(err,user) {
+            user_schema.findOne({ $or:[ {errorWhileScraping:false}, {errorWhileScraping:{$exists:false}} ], scrapedProfile:true, isPublic:true, scrapedGames:false}, {steamid:1}, function(err,user) {
                 if (err) console.log(err);
                 if (!user) {
                     console.log("findNewProfiles(gatherProfilesGames): No unscraped user found. Retry in 10.");
                     setTimeout(function(){ findNewProfiles(2); }, 10000);
                 } else {
-                    gatherProfilesGames(user)
+                    gatherProfilesGames(user.steamid)
                 }
             });
-
             break;
         case 3: //3 = gatherProfilesFriends: get 1 (scrapedFriends == false) steamid64, this one is needed to populate the database with unscraped profiles
-            user_schema.findOne({scrapedProfile:true, isPublic:true, scrapedFriends:false}, {steamid:1}, function(err,user) {
+            user_schema.findOne({ $or:[ {errorWhileScraping:false}, {errorWhileScraping:{$exists:false}} ], scrapedProfile:true, isPublic:true, scrapedFriends:false}, {steamid:1}, function(err,user) {
                 if (err) console.log(err);
                 if (!user) {
                     console.log("findNewProfiles(gatherProfilesFriends): No unscraped user found. Retry in 10.");
                     setTimeout(function(){ findNewProfiles(3); }, 10000);
                 } else {
-                    gatherProfilesFriends(user)
+                    gatherProfilesFriends(user.steamid)
                 }
             });
-
             break;
     }
 }
+
+findNewProfiles(1);
+//findNewProfiles(2);
+findNewProfiles(3);
+
+var firstRun = function() {
+    new user_schema({
+        steamid:"76561197972851741",
+        scrapedProfile:false,
+        scrapedGames:false,
+        scrapedFriends:false,
+    }).save(function(err){
+        if (err) console.log(err);
+    })
+}
+//firstRun();
 
 //findNewProfiles();
 //scrape100("76561197972851741,76561198320752697");
@@ -255,3 +290,5 @@ var findNearbyUsers = function(appid, coordinates) {
 }
 
 //findNearbyUsers(730, (100,50));
+
+findNewProfiles
