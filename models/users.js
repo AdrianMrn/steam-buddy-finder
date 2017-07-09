@@ -4,7 +4,10 @@ Schema = mongoose.Schema;
 var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder5');
 
 var userSchema = new Schema({
-  isScraped: { type: Boolean, default: false },
+  errorWhileScraping: { type: Boolean, default: false },
+  scrapedProfile: { type: Boolean, default: false },
+  scrapedFriends: { type: Boolean, default: false },
+  scrapedGames: { type: Boolean, default: false },
   steamid: String,
   username: String,
   profileurl: String,

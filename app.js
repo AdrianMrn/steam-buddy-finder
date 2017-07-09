@@ -31,7 +31,8 @@ var scrape100 = function(steamids) {
     });
 }
 
-var gatherProfilesInfo = function(steamids, next) {
+//needs scrapedProfile == false steamids, batches of 100
+var gatherProfilesInfo = function(steamids) {
     var uri = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + key + "&steamids=" + steamids;
     request(uri, function(err, response, body) {
         if (err) console.log(err);
@@ -74,6 +75,7 @@ var gatherProfilesInfo = function(steamids, next) {
                 } else locationCoords = null;
 
                 user_schema.findOneAndUpdate({steamid:player.steamid}, {
+                    scrapedProfile: true,
                     steamid:player.steamid,
                     username: player.personaname,
                     profileurl: player.profileurl,
@@ -93,73 +95,65 @@ var gatherProfilesInfo = function(steamids, next) {
                     }
                 }, {upsert:true}, function(err, response){
                     if (err) console.log(err);
-                    console.log("Got a user's profile info:", player.steamid);
+                    //console.log("Got a user's profile info:", player.steamid);
                     callback();
                 });
             }, function(err) {
                 if (err) console.log(err)
-                next();
+                console.log("Got 100 users' profile info.");
+                findNewProfiles(1);
             });
         } else {
             console.log(response);
             if (response) console.log(response.statusCode ? response.statusCode : "Error");
             //process.exit();
-            next();
+            findNewProfiles(1);
         }
     });
 }
 
-
-var gatherProfilesGames = function(steamids, next) {
+//needs scrapedGames == false && scrapedProfile == true, 1 by 1
+var gatherProfilesGames = function(steamid) {
     var uri = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + key + "&format=json&include_played_free_games=true&steamid=";
-    var steamidsarray = steamids.split(",");
 
-    async.eachLimit(steamidsarray, 25, function(steamid, callback) {
-        request(uri + steamid, function(err, response, body) {
-            if (err) console.log(err);
-            if (response && response.statusCode == 200){
-                body = JSON.parse(body);
-                games = body.response.games;
-				if (games) {
-                    user_schema.findOneAndUpdate({steamid:steamid}, {games:games, isScraped:true,}, function(err, response) {
-                    if (err) console.log(err);
-						console.log("Got a user's games list:", steamid);
-						callback();
-					});
-				} else {
-					sleep = true;
-					callback();
-				}
-            } else {
-				console.log(response);
-				if (response) console.log(response.statusCode ? response.statusCode : "Error");
-				//process.exit();
-				callback();
-			}
-        });
-    }, function(err) {
+    request(uri + steamid, function(err, response, body) {
         if (err) console.log(err);
-		if (sleep) {
-			console.log("sleeping because of empty response");
-			sleep = false;
-			setTimeout(next, 1200);
-		} else {
-			next();
-		}
+        if (response && response.statusCode == 200){
+            body = JSON.parse(body);
+            games = body.response.games;
+            if (games) {
+                user_schema.findOneAndUpdate({steamid:steamid}, {games:games, scrapedGames:true,}, function(err, response) {
+                if (err) console.log(err);
+                    console.log("Got a user's gamelist:", steamid);
+                    setTimeout(findNewProfiles(2), 200);
+                });
+            } else {
+                user_schema.findOneAndUpdate({steamid:steamid}, {errorWhileScraping:true,}, function(err, response) {
+                if (err) console.log(err);
+                    console.log("Didn't manage to get a user's gamelist:", steamid);
+                    setTimeout(findNewProfiles(2), 1000);
+                });
+            }
+        } else {
+            console.log(response);
+            if (response) console.log(response.statusCode ? response.statusCode : "Error");
+            //process.exit();
+            findNewProfiles(2);
+        }
     });
 }
 
-var gatherProfilesFriends = function(steamids, next) {
+//needs scrapedProfile == true && scrapedFriends == false, 1 by 1
+//future: set scrapedFriends to true for steamid
+var gatherProfilesFriends = function(steamid) {
     var uri = "http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key=" + key + "&relationship=friend&steamid=";
-    var steamidsarray = steamids.split(",");
 
-    async.eachLimit(steamidsarray, 5, function(steamid, callback) {
-        request(uri + steamid, function(err, response, body) {
-            if (err) console.log(err);
-            if (response && response.statusCode == 200){
-                body = JSON.parse(body);
-                friends = body.friendslist.friends;
-
+    request(uri + steamid, function(err, response, body) {
+        if (err) console.log(err);
+        if (response && response.statusCode == 200){
+            body = JSON.parse(body);
+            friends = body.friendslist.friends;
+            if (friends) {
                 async.eachLimit(friends, 5, function(friend, callbackFriend) {
                     user_schema.findOne({steamid:friend.steamid}, function(err, response) {
                         if (err) console.log(err);
@@ -169,50 +163,79 @@ var gatherProfilesFriends = function(steamids, next) {
                                 steamid:friend.steamid,
                             }, {upsert:true}, function(err, response){
                                 if (err) console.log(err);
-                                console.log("Got a user's friend list:", steamid);
+                                //console.log("Got a user's friend list:", steamid);
                                 callbackFriend();
                             });
                         } else callbackFriend();
                     });
                 }, function(err) {
                     if (err) console.log(err);
-                    callback();
+                    console.log("Got a user's friends' friendlists:", steamid);
+                    findNewProfiles(3);
                 });
-            } else {
+            } else findNewProfiles(3);
+        } else {
             console.log(response);
             if (response) console.log(response.statusCode ? response.statusCode : "Error");
             //process.exit();
-            callback();
-            }
-        });
-    }, function(err) {
-        if (err) console.log(err);
-        next();
+            findNewProfiles(3);
+        }
     });
 }
 
-//gets 100 unscraped steamid64's from the database, delimited by commas & starts the scrape100() function
-var findNewProfiles = function() {
-    steamids = "";
-    user_schema.find({isScraped:false, steamid: {$exists: true}}, {steamid:1}, function(err,users) {
-        if (err) console.log(err);
-        if (!users) {
-            scrape100("76561197972851741"); //future: fix this because it doesn't work
-        } else {
-            async.each(users, function(user, callback) {
-                steamids += user.steamid + ",";
-                callback();
-            }, function(err) {
+//takes a variable to decide which type of unscraped profiles to return (1=gatherProfilesInfo, 2=gatherProfilesGames, 3=gatherProfilesFriends)
+//future: check for errorWhileScraping
+var findNewProfiles = function(scrapeType) {
+    switch (scrapeType) {
+        case 1: //1 = gatherProfilesInfo: get 100 (scrapedProfile == false) steamid64's from the database, delimited by commas
+            steamids = "";
+            user_schema.find({scrapedProfile:false, steamid: {$exists: true}}, {steamid:1}, function(err,users) {
                 if (err) console.log(err);
-                steamids = steamids.substring(0, steamids.length - 1);
-                scrape100(steamids)
+                if (!users) {
+                    console.log("findNewProfiles(gatherProfilesInfo): No unscraped users found. Retry in 10.");
+                    setTimeout(function(){ findNewProfiles(1); }, 10000);
+                } else {
+                    async.each(users, function(user, callback) {
+                        steamids += user.steamid + ",";
+                        callback();
+                    }, function(err) {
+                        if (err) console.log(err);
+                        steamids = steamids.substring(0, steamids.length - 1);
+                        gatherProfilesInfo(steamids)
+                    });
+                }
+            }).limit(100);
+
+            break;
+        case 2: //2 = gatherProfilesGames: get 1 (scrapedGames == false) steamid64
+            user_schema.findOne({scrapedProfile:true, isPublic:true, scrapedGames:false}, {steamid:1}, function(err,user) {
+                if (err) console.log(err);
+                if (!user) {
+                    console.log("findNewProfiles(gatherProfilesGames): No unscraped user found. Retry in 10.");
+                    setTimeout(function(){ findNewProfiles(2); }, 10000);
+                } else {
+                    gatherProfilesGames(user)
+                }
             });
-        }
-    }).limit(100);
+
+            break;
+        case 3: //3 = gatherProfilesFriends: get 1 (scrapedFriends == false) steamid64, this one is needed to populate the database with unscraped profiles
+            user_schema.findOne({scrapedProfile:true, isPublic:true, scrapedFriends:false}, {steamid:1}, function(err,user) {
+                if (err) console.log(err);
+                if (!user) {
+                    console.log("findNewProfiles(gatherProfilesFriends): No unscraped user found. Retry in 10.");
+                    setTimeout(function(){ findNewProfiles(3); }, 10000);
+                } else {
+                    gatherProfilesFriends(user)
+                }
+            });
+
+            break;
+    }
 }
 
 //findNewProfiles();
-scrape100("76561197972851741,76561198320752697");
+//scrape100("76561197972851741,76561198320752697");
 
 //API part
 var findNearbyUsers = function(appid, coordinates) {
