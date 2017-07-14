@@ -12,6 +12,14 @@ var key = vars.steamapikey;
 
 var skipFriendList = true;
 
+/*var kek = function() {
+    console.log(vars.scrapeFriends);
+    setTimeout(function() {
+        kek();
+    }, 1000);
+}
+kek()*/
+
 var scrape100 = function(steamids) {
     console.log("Starting to get info for batch.");
     gatherProfilesInfo(steamids, function() {
@@ -253,9 +261,9 @@ var findNewProfiles = function(scrapeType) {
     }
 }
 
-findNewProfiles(1);
+//findNewProfiles(1);
 //findNewProfiles(2);
-findNewProfiles(3);
+//findNewProfiles(3);
 
 var firstRun = function() {
     new user_schema({
@@ -267,7 +275,7 @@ var firstRun = function() {
         if (err) console.log(err);
     })
 }
-//firstRun();
+firstRun();
 
 //findNewProfiles();
 //scrape100("76561197972851741,76561198320752697");
