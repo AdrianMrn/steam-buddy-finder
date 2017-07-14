@@ -27,7 +27,7 @@ var updateRunSettings = function() {
         updateRunSettings();
     }, 1000);
 }
-updateRunSettings();
+//updateRunSettings();
 
 
 //needs scrapedProfile == false steamids, batches of 100
@@ -177,20 +177,18 @@ var gatherProfilesFriends = function(steamid) {
             friends = body.friendslist.friends;
             if (friends) {
                 async.eachLimit(friends, 5, function(friend, callbackFriend) {
-                    user_schema.findOne({steamid:friend.steamid}, function(err, response) {
+                    user_schema.findOneAndUpdate({steamid:friend.steamid}, {
+                        $set: {},
+                        $setOnInsert: {
+                            scrapedProfile:false,
+                            scrapedGames:false,
+                            scrapedFriends:false,
+                            steamid:friend.steamid,
+                        }
+                    }, {upsert:true}, function(err, response){
                         if (err) console.log(err);
-                        if (!response) {
-                            user_schema.findOneAndUpdate({steamid:friend.steamid}, {
-                                scrapedProfile:false,
-                                scrapedGames:false,
-                                scrapedFriends:false,
-                                steamid:friend.steamid,
-                            }, {upsert:true}, function(err, response){
-                                if (err) console.log(err);
-                                //console.log("Got a user's friend list:", steamid);
-                                callbackFriend();
-                            });
-                        } else callbackFriend();
+                        //console.log("Got a user's friend list:", friend.steamid);
+                        callbackFriend();
                     });
                 }, function(err) {
                     if (err) console.log(err);
@@ -260,9 +258,9 @@ var findNewProfiles = function(scrapeType) {
     }
 }
 
-//findNewProfiles(1);
+findNewProfiles(1);
 //findNewProfiles(2);
-//findNewProfiles(3);
+findNewProfiles(3);
 
 var firstRun = function() {
     new user_schema({
