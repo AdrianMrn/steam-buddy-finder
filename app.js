@@ -5,39 +5,30 @@ var user_schema = require('./models/users').user;
 var vars = require('./.vars');
 var geofile = require('./steam_countries.min.json');
 var mongoose = require('mongoose');
+var fs = require("fs");
+var runSettingsFile = './.runSettings.js';
 mongoose.Promise = global.Promise;
 
-var sleep = false;
 var key = vars.steamapikey;
 
-var skipFriendList = true;
+var runSettings;
+var scrapeProfiles, scrapeGames, scrapeFriends;
+var updateRunSettings = function() {
+    fs.readFile(runSettingsFile, 'utf8', function (err, data) {
+        if (err) throw err;
+        obj = JSON.parse(data);
+        scrapeProfiles = obj.scrapeProfiles;
+        scrapeGames = obj.scrapeGames;
+        scrapeFriends = obj.scrapeFriends;
 
-/*var kek = function() {
-    console.log(vars.scrapeFriends);
+        console.log(scrapeProfiles, scrapeGames, scrapeFriends);
+    });
     setTimeout(function() {
-        kek();
+        updateRunSettings();
     }, 1000);
 }
-kek()*/
+updateRunSettings();
 
-var scrape100 = function(steamids) {
-    console.log("Starting to get info for batch.");
-    gatherProfilesInfo(steamids, function() {
-        console.log("Starting to get games for batch.");
-        gatherProfilesGames(steamids, function() {
-            console.log("Starting to get friends for batch.");
-            if (!skipFriendList) {
-                gatherProfilesFriends(steamids, function() {
-                    console.log("Batch of 100 finished, getting another");
-                    findNewProfiles();
-                });
-            } else {
-                console.log("Batch of 100 finished, getting another");
-                findNewProfiles();
-            }
-        });
-    });
-}
 
 //needs scrapedProfile == false steamids, batches of 100
 var gatherProfilesInfo = function(steamids) {
@@ -118,8 +109,8 @@ var gatherProfilesInfo = function(steamids) {
                 var amountOfUsers = steamids.split(",").length
                 console.log("Got", amountOfUsers, "users' profile info.");
                 if(amountOfUsers < 100) {
-                    console.log("gatherProfilesInfo: Less than 100 users in last batch, pausing for 10 seconds.");
-                    setTimeout(function(){findNewProfiles(1);}, 10000);
+                    console.log("gatherProfilesInfo: Less than 100 users in last batch, pausing for 30 seconds.");
+                    setTimeout(function(){findNewProfiles(1);}, 30000);
                 } else {
                     findNewProfiles(1);
                 }
@@ -151,7 +142,15 @@ var gatherProfilesGames = function(steamid) {
                 });
             } else {
                 user_schema.findOneAndUpdate({steamid:steamid}, {errorWhileScraping:true,}, function(err, response) {
-                if (err) console.log(err);
+                    if (err) console.log(err);
+                    /*future: create a variable percentageErrorsLast10Queries (or whatever)
+                    that keeps track of the % amount of errors within the last 10 or so queries.
+                    If this percentage > 30% or so (3 out of 10 last queries are errors),
+                    pause the function for 5 minutes or so? Keep track of this for every function seperately (or together? idk)
+                    --> how to do this maybe: create a function where you can send the type of query and its status,
+                    function saves 3 arrays (1 for each function) that save the last 10 queries' statuses. if there's more than x% errors in this array,
+                    we pause the function somehow? (variable pauseScrapeGames = true + a check at the start of that function which makes it timeout for a minute
+                    before continuing)*/
                     console.log("Didn't manage to get a user's gamelist:", steamid);
                     setTimeout(function(){findNewProfiles(2);}, 200);
                 });
@@ -275,15 +274,12 @@ var firstRun = function() {
         if (err) console.log(err);
     })
 }
-firstRun();
-
-//findNewProfiles();
-//scrape100("76561197972851741,76561198320752697");
+//firstRun();
 
 //API part
 var findNearbyUsers = function(appid, coordinates) {
     user_schema.find({
-        isScraped: true,
+        //isScraped: true,
         isPublic: true,
         'games.appid': appid
     }, {
@@ -298,5 +294,3 @@ var findNearbyUsers = function(appid, coordinates) {
 }
 
 //findNearbyUsers(730, (100,50));
-
-findNewProfiles
