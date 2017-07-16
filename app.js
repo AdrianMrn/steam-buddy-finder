@@ -11,7 +11,7 @@ mongoose.Promise = global.Promise;
 
 var key = vars.steamapikey;
 
-var runSettings;
+/*var runSettings;
 var scrapeProfiles, scrapeGames, scrapeFriends;
 var updateRunSettings = function() {
     fs.readFile(runSettingsFile, 'utf8', function (err, data) {
@@ -26,9 +26,25 @@ var updateRunSettings = function() {
     setTimeout(function() {
         updateRunSettings();
     }, 1000);
-}
+}*/
 //updateRunSettings();
 
+var maxErrorsPerMinute = 5;
+var pauseTime = 60000;
+var errorsProfiles = 0;
+var errorsGames = 0;
+var errorsFriends = 0;
+//future: this should really be a function that keeps track of the last 10 queries rather than the queries in the last minute. If queries are super fast, a lot of errors are more likely to reach the maxErrorsPerMinute value than if there's only a couple of queries per minute but they're all errors (think HTTP timeout error,...)
+var clearErrorsInLastMinute = function() {
+    if (errorsProfiles) errorsProfiles--;
+    if (errorsGames) errorsGames--;
+    if (errorsFriends) errorsFriends--;
+    console.log(errorsProfiles,errorsGames,errorsFriends);
+    setTimeout(function() {
+        clearErrorsInLastMinute();
+    }, 60000/maxErrorsPerMinute);
+}
+clearErrorsInLastMinute();
 
 //needs scrapedProfile == false steamids, batches of 100
 var gatherProfilesInfo = function(steamids) {
@@ -105,7 +121,7 @@ var gatherProfilesInfo = function(steamids) {
                     callback();
                 });
             }, function(err) {
-                if (err) console.log(err)
+                if (err) console.log(err);
                 var amountOfUsers = steamids.split(",").length
                 console.log("Got", amountOfUsers, "users' profile info.");
                 if(amountOfUsers < 100) {
@@ -116,6 +132,7 @@ var gatherProfilesInfo = function(steamids) {
                 }
             });
         } else {
+            errorsProfiles++;
             //console.log(response);
             console.log("gatherProfilesInfo: Issue scraping ", steamids, response ? response.statusCode : "Error");
             /*user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
@@ -156,6 +173,7 @@ var gatherProfilesGames = function(steamid) {
                 });
             }
         } else {
+            errorsGames++;
             //console.log(response);
             console.log("gatherProfilesGames: Issue scraping ", steamid, response ? response.statusCode : "Error");
             user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
@@ -200,6 +218,7 @@ var gatherProfilesFriends = function(steamid) {
                 });
             } else findNewProfiles(3);
         } else {
+            errorsFriends++;
             //console.log(response);
             console.log("gatherProfilesFriends: Issue scraping ", steamid, response ? response.statusCode : "Error");
             user_schema.findOneAndUpdate({steamid:steamid},{errorWhileScraping:true}, function(err,response){
@@ -228,7 +247,14 @@ var findNewProfiles = function(scrapeType) {
                     }, function(err) {
                         if (err) console.log(err);
                         steamids = steamids.substring(0, steamids.length - 1);
-                        gatherProfilesInfo(steamids)
+                        if (errorsProfiles >= maxErrorsPerMinute) {
+                            console.log("gatherProfilesInfo: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                            setTimeout(function() {
+                                gatherProfilesInfo(steamids);
+                            }, pauseTime);
+                        } else {
+                            gatherProfilesInfo(steamids);
+                        }
                     });
                 }
             }).limit(100);
@@ -240,7 +266,14 @@ var findNewProfiles = function(scrapeType) {
                     console.log("findNewProfiles(gatherProfilesGames): No unscraped user found. Retry in 10.");
                     setTimeout(function(){ findNewProfiles(2); }, 10000);
                 } else {
-                    gatherProfilesGames(user.steamid)
+                    if (errorsGames >= maxErrorsPerMinute) {
+                        console.log("gatherProfilesGames: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                        setTimeout(function() {
+                            gatherProfilesGames(user.steamid);
+                        }, pauseTime);
+                    } else {
+                        gatherProfilesGames(user.steamid);
+                    }
                 }
             });
             break;
@@ -251,16 +284,19 @@ var findNewProfiles = function(scrapeType) {
                     console.log("findNewProfiles(gatherProfilesFriends): No unscraped user found. Retry in 10.");
                     setTimeout(function(){ findNewProfiles(3); }, 10000);
                 } else {
-                    gatherProfilesFriends(user.steamid)
+                    if (errorsFriends >= maxErrorsPerMinute) {
+                        console.log("gatherProfilesFriends: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                        setTimeout(function() {
+                            gatherProfilesFriends(user.steamid);
+                        }, pauseTime);
+                    } else {
+                        gatherProfilesFriends(user.steamid);
+                    }
                 }
             });
             break;
     }
 }
-
-findNewProfiles(1);
-//findNewProfiles(2);
-findNewProfiles(3);
 
 var firstRun = function() {
     new user_schema({
@@ -272,7 +308,11 @@ var firstRun = function() {
         if (err) console.log(err);
     })
 }
-//firstRun();
+firstRun();
+
+findNewProfiles(1);
+findNewProfiles(2);
+findNewProfiles(3);
 
 //API part
 var findNearbyUsers = function(appid, coordinates) {

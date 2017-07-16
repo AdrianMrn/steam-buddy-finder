@@ -1,14 +1,14 @@
 var mongoose = require('mongoose');
 Schema = mongoose.Schema;
 
-var localConnection = mongoose.createConnection('mongodb://localhost/steam-buddy-finder6');
+var localConnection = mongoose.createConnection('mongodb://localhost/sbf2');
 
 var userSchema = new Schema({
   errorWhileScraping: { type: Boolean, default: false },
   scrapedProfile: { type: Boolean, default: false },
   scrapedGames: { type: Boolean, default: false },
   scrapedFriends: { type: Boolean, default: false },
-  steamid: String,
+  steamid: { type: String, unique: true, index: true },
   username: String,
   profileurl: String,
   isPublic: Boolean,

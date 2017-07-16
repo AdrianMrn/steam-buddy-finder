@@ -7,5 +7,5 @@ Contact adriaanmarain300@gmail.com for info please.
 - Frontend: (Chrome) Browser Plugin
 
 # Query Example
-db.users.find({ 'locationInfo.locationCoords': { $nearSphere: { $geometry: { type: "Point", coordinates: [ 4,51 ] }, $maxDistance: 5*1600 } } })
---> Shows all users in a ~5km radius around a point between Aalst & Dendermonde, Belgium
+db.users.find({ 'games.appid':730, 'locationInfo.locationCoords': { $nearSphere: { $geometry: { type: "Point", coordinates: [ 4.4025,51.2194 ] }, $maxDistance: 5*1600 } } })
+--> Shows all users that own CS:GO (appid 730) in a ~5km radius around Antwerp, Belgium (and Antwerp province, it seems).
