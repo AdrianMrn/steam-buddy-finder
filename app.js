@@ -30,7 +30,7 @@ var updateRunSettings = function() {
 //updateRunSettings();
 
 var maxErrorsPerMinute = 5;
-var pauseTime = 60000;
+var pauseTime = 600000;
 var errorsProfiles = 0;
 var errorsGames = 0;
 var errorsFriends = 0;
@@ -248,7 +248,7 @@ var findNewProfiles = function(scrapeType) {
                         if (err) console.log(err);
                         steamids = steamids.substring(0, steamids.length - 1);
                         if (errorsProfiles >= maxErrorsPerMinute) {
-                            console.log("gatherProfilesInfo: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                            console.log("gatherProfilesInfo: More than", maxErrorsPerMinute, "errors in the last minute, pausing for", pauseTime, "ms.");
                             setTimeout(function() {
                                 gatherProfilesInfo(steamids);
                             }, pauseTime);
@@ -267,7 +267,7 @@ var findNewProfiles = function(scrapeType) {
                     setTimeout(function(){ findNewProfiles(2); }, 10000);
                 } else {
                     if (errorsGames >= maxErrorsPerMinute) {
-                        console.log("gatherProfilesGames: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                        console.log("gatherProfilesGames: More than", maxErrorsPerMinute, "errors in the last minute, pausing for", pauseTime, "ms.");
                         setTimeout(function() {
                             gatherProfilesGames(user.steamid);
                         }, pauseTime);
@@ -285,7 +285,7 @@ var findNewProfiles = function(scrapeType) {
                     setTimeout(function(){ findNewProfiles(3); }, 10000);
                 } else {
                     if (errorsFriends >= maxErrorsPerMinute) {
-                        console.log("gatherProfilesFriends: More than", maxErrorsPerMinute, "in the last minute, pausing for", pauseTime, "ms.");
+                        console.log("gatherProfilesFriends: More than", maxErrorsPerMinute, "errors in the last minute, pausing for", pauseTime, "ms.");
                         setTimeout(function() {
                             gatherProfilesFriends(user.steamid);
                         }, pauseTime);
