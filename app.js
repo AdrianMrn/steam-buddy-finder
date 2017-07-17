@@ -2,13 +2,17 @@ var request = require('request');
 var rp = require('request-promise');
 var async = require('async');
 var user_schema = require('./models/users').user;
-var vars = require('./.vars');
-var geofile = require('./steam_countries.min.json');
 var mongoose = require('mongoose');
 var fs = require("fs");
-var runSettingsFile = './.runSettings.js';
-mongoose.Promise = global.Promise;
 
+var express = require('express');
+var app = express();
+
+var vars = require('./assets/.vars');
+var geofile = require('./assets/steam_countries.min.json');
+var runSettingsFile = './assets/.runSettings.js';
+
+mongoose.Promise = global.Promise;
 var key = vars.steamapikey;
 
 /*var runSettings;
@@ -310,25 +314,46 @@ var firstRun = function() {
 }
 firstRun();
 
-findNewProfiles(1);
-findNewProfiles(2);
-findNewProfiles(3);
+//findNewProfiles(1);
+//findNewProfiles(2);
+//findNewProfiles(3);
 
 //API part
-var findNearbyUsers = function(appid, coordinates) {
+var findNearbyUsers = function(appid, coordinates, next) {
     user_schema.find({
-        //isScraped: true,
+        lastlogoff: { $gt: Math.floor(new Date()/1000)-2678400}, //only users that have been active in the last 31 days
         isPublic: true,
-        'games.appid': appid
+        'games.appid': appid,
+        'locationInfo.locationCoords': { $nearSphere: { $geometry: { type: "Point", coordinates: coordinates }, $maxDistance: 50 * 1609.34 } },
     }, {
         username:1,
         profileurl:1,
         avatar:1,
-        'locationInfo.locationString':1
+        'locationInfo.locationString':1,
+        games:1, //future: $ operator does not work to get the proper appid because I'm using 2 arrays in the query, but find a way to solve this (s.o. question)
+        lastlogoff:1,
     }, function(err, response) {
         if (err) console.log(err);
-        console.log(response);
-    }).limit(1)
+        //console.log(response);
+        next(err, response);
+    }).limit(10)
 }
+//findNearbyUsers(730, [4.4025,51.2194], function(response) {
 
-//findNearbyUsers(730, (100,50));
+app.get('/', function (req, res) {
+    if (req.query.appid && req.query.coordinatesx && req.query.coordinatesy) {
+        findNearbyUsers(req.query.appid, [req.query.coordinatesx,req.query.coordinatesy], function(err, response) {
+            if (err) {
+                res.send(err);
+            } else {
+                res.send(response);
+            }
+        });
+    } else {
+        res.send("Malformed request");
+    }
+});
+
+app.listen(3000, function () {
+    console.log('App listening on port 3000!')
+})

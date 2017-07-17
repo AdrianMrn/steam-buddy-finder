@@ -1,13 +1,13 @@
 var mongoose = require('mongoose');
 Schema = mongoose.Schema;
 
-var localConnection = mongoose.createConnection('mongodb://localhost/sbf2');
+var localConnection = mongoose.createConnection('mongodb://localhost/sbf_big2');
 
 var userSchema = new Schema({
   errorWhileScraping: { type: Boolean, default: false },
-  scrapedProfile: { type: Boolean, default: false },
-  scrapedGames: { type: Boolean, default: false },
-  scrapedFriends: { type: Boolean, default: false },
+  scrapedProfile: { type: Boolean, default: false, index: true },
+  scrapedGames: { type: Boolean, default: false, index: true },
+  scrapedFriends: { type: Boolean, default: false, index: true },
   steamid: { type: String, unique: true, index: true },
   username: String,
   profileurl: String,
