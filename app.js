@@ -93,7 +93,7 @@ var gatherProfilesInfo = function(steamids) {
                     locationCoords[0] = tmp;
 
                     //if coordinates would cause an error, switch them around again? no idea know why this happens.
-                    if (locationCoords[1] >= 90) {
+                    if (locationCoords[1] >= 90 || locationCoords[1] <= -90) {
                         var tmp = locationCoords[1];
                     locationCoords[1] = locationCoords[0];
                     locationCoords[0] = tmp;
@@ -120,7 +120,12 @@ var gatherProfilesInfo = function(steamids) {
                         },
                     }
                 }, {upsert:true}, function(err, response){
-                    if (err) console.log(err);
+                    if (err) {
+                        console.log(err);
+                        user_schema.findOneAndUpdate({steamid:player.steamid}, {
+                            errorWhileScraping: true
+                        });
+                    }
                     //console.log("Got a user's profile info:", player.steamid);
                     callback();
                 });
@@ -164,14 +169,6 @@ var gatherProfilesGames = function(steamid) {
             } else {
                 user_schema.findOneAndUpdate({steamid:steamid}, {errorWhileScraping:true,}, function(err, response) {
                     if (err) console.log(err);
-                    /*future: create a variable percentageErrorsLast10Queries (or whatever)
-                    that keeps track of the % amount of errors within the last 10 or so queries.
-                    If this percentage > 30% or so (3 out of 10 last queries are errors),
-                    pause the function for 5 minutes or so? Keep track of this for every function seperately (or together? idk)
-                    --> how to do this maybe: create a function where you can send the type of query and its status,
-                    function saves 3 arrays (1 for each function) that save the last 10 queries' statuses. if there's more than x% errors in this array,
-                    we pause the function somehow? (variable pauseScrapeGames = true + a check at the start of that function which makes it timeout for a minute
-                    before continuing)*/
                     console.log("Didn't manage to get a user's gamelist:", steamid);
                     setTimeout(function(){findNewProfiles(2);}, 200);
                 });
@@ -202,6 +199,7 @@ var gatherProfilesFriends = function(steamid) {
                     user_schema.findOneAndUpdate({steamid:friend.steamid}, {
                         $set: {},
                         $setOnInsert: {
+                            errorWhileScraping:false,
                             scrapedProfile:false,
                             scrapedGames:false,
                             scrapedFriends:false,
@@ -314,9 +312,9 @@ var firstRun = function() {
 }
 firstRun();
 
-//findNewProfiles(1);
-//findNewProfiles(2);
-//findNewProfiles(3);
+//findNewProfiles(1); //profiles
+//findNewProfiles(2); //games
+//findNewProfiles(3); //friends
 
 //API part
 var findNearbyUsers = function(appid, coordinates, next) {

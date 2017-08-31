@@ -33,6 +33,8 @@ var userSchema = new Schema({
   timestamps: true
 });
 
+userSchema.index({isPublic:1, scrapedGames:1});
+
 var user = localConnection.model('user', userSchema);
 module.exports = {
 	user: user
